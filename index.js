@@ -319,6 +319,9 @@
               });
             }
             const endPart = !!splitSql[2] ? ` where ${splitSql[2]}` : '';
+            if (firstPart.trim().endsWith(',')){
+              firstPart = firstPart.substring(0, firstPart.lastIndexOf(','));
+            }
             sql = `${firstPart}${endPart}`;
           }
           const parsedSql = parseSql(sql);
