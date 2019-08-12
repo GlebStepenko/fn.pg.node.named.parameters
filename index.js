@@ -116,11 +116,18 @@
    *   indexes[] - the list of indexes, one-orgin, of the parameter
    */
   function _parseSql(stmt) {
-    var params = [];    
+    var params = [];
     var i = 0, j;
-    if( !_.isString(stmt) ) {
+    if( typeof stmt !== 'string' ) {
       throw new Error("stmt argument must be a string, given: " + typeof(stmt));
     }
+
+
+
+
+
+
+
     while( i < stmt.length ) {
       var skipToPosition = i;
       while( i < stmt.length ) {
@@ -213,9 +220,7 @@
       param = params[i];
       paramTypes[param.type] = (paramTypes[param.type] || 0) + 1;
       if( /^[0-9]+$/.test(param.name) ) {
-        throw new Error("You cannot mix named and numbered parameters." +
-            " Check parameter '" + param.name + "' at position " + param.start +
-            " in statement: " + stmt);
+        throw new Error(`You cannot mix named and numbered parameters. Check parameter ${param.name} at position ${param.start} in statement: ${stmt}`);
       }
       namedParam = namedParams[param.name];
       if( !namedParam ) {
@@ -237,8 +242,8 @@
     }
 
     if( !globals.options.allowMultipleParamTypes ) {
-      if( _.size(_.keys(paramTypes)) > 1 ) {
-        throw new Error("You cannot mix multiple types of named parameters in statement: " + stmt);
+      if (Object.keys(paramTypes).length > 1) {
+        throw new Error(`You cannot mix multiple types of named parameters in statement: ${stmt}`);
       }
     }
 
@@ -287,25 +292,38 @@
     debug.main('Patching pg module with options:', globals.options);
 
     // Add named parameter support to Client.query:
-    var origQuery = pg.Client.prototype.query;
+    const origQuery = pg.Client.prototype.query;
     pg.Client.prototype.query = function(config, values, callback) {
-      var sql;
-      if( _.isString(config) ) {
-        sql = config;
-      } else if( _.isObject(config) && _.has(config, 'text') ) {
-        sql = config.text;        
-      }
+      let sql = typeof config === 'string' ? config.trim() : !!config && (typeof config === 'object') && config.hasOwnProperty('text') ? config.text : '';
+
       if( sql ) {
         debug.sql(filterDebugSQL(sql));
       }
-      if( arguments.length === 3 && !_.isArray(values) && _.isObject(values) ) {
+      if( arguments.length === 3 && !Array.isArray(values) && (!!values && (typeof values === 'object') ) ) {
         try {
           if( !sql ) {
             throw new Error("First parameter of query() must be a string or config object with a name property");
           }
-          var parsedSql = parseSql(sql);
+
+          if (sql.toUpperCase().startsWith('UPDATE')) {
+            const splitSql = sql.split(/\b(\w*where)\b/);
+            let firstPart = splitSql[0];
+            if (!!firstPart) {
+              firstPart = firstPart.replace(/\w+(\s*=\s*):.*?(\w|\-)+(\s*,)?/g, val => {
+                const sd  = val.split(/(\s*=\s*):.*?/g);
+                const updateField = sd[0];
+                const paramSplit  = sd[2].split(/,/g);
+                const paramName = paramSplit[0].trim();
+                const endComma = paramSplit.length === 1 ? '' : ',';
+                return values.hasOwnProperty(paramName) ? `${updateField}=:${paramName}${endComma}` : '';
+              });
+            }
+            const endPart = !!splitSql[2] ? ` where ${splitSql[2]}` : '';
+            sql = `${firstPart}${endPart}`;
+          }
+          const parsedSql = parseSql(sql);
           debug.main("parsed sql:", parsedSql);
-          var params = convertParamValues(parsedSql, values);
+          const params = convertParamValues(parsedSql, values);
           debug.main("parsed params:", params);
           return origQuery.apply(this, [parsedSql.sql, params, callback]);
         } catch( err ) {
