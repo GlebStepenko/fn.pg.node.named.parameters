@@ -1,39 +1,33 @@
 (function () {
   "use strict";
-
-  var _ = require('lodash');
-  var debugModule;
+  let debugModule;
   try {
     debugModule = require('debug');
   } catch( e ) {
     // debug module not found, ignore and use a no-op
-    debugModule = function(name) { return function() {}; };
+    debugModule = name => () => {};
   }
-  var debug = {
+  const debug = {
       main: debugModule('pg-spice'),
       parsed: debugModule('pg-spice:parsed'),
       params: debugModule('pg-spice:params'),
       sql: debugModule('pg-spice:sql')
   };
 
-  var defaults = {
+  const defaults = {
     enableParseCache: true,
     allowMultipleParamTypes: false,
     trimDebugSql: process.env.PG_SPICE_TRIM_DEBUG_SQL === 'true'
   };
-  var globals = {
+  const globals = {
     isPatched: false,
     options: defaults
   };
-  var parseCache = {};
+  const parseCache = {};
 
-  var PARAMETER_SEPARATORS = ['"', '\'', ':', '&', ',', ';', '(', ')', '|', '=', '+', '-', '*', '%', '/', '\\', '<', '>', '^'];
-  var SKIPS = [{start: "'", stop: "'"},
-               {start: "\"", stop: "\""},
-               {start: "--", stop: "\n"},
-               {start: "/*", stop: "*/"}];
-  var START_SKIP = ["'", "\"", "--", "/*"];
-  var STOP_SKIP  = ["'", "\"", "\n", "*/"];
+  const PARAMETER_SEPARATORS = ['"', '\'', ':', '&', ',', ';', '(', ')', '|', '=', '+', '-', '*', '%', '/', '\\', '<', '>', '^'];
+  const START_SKIP = ["'", "\"", "--", "/*"];
+  const STOP_SKIP  = ["'", "\"", "\n", "*/"];
 
   function skipCommentsAndQuotes(sql, position) {
     var i, j, m, n, match, offset, endMatch, endPos;
@@ -77,19 +71,11 @@
   }
 
   function isParamSeparator(c) {
-    if( /\s/.test(c) ) {
-      return true;
-    }
-    for(var i=0;i<PARAMETER_SEPARATORS.length;i++) {
-      if( PARAMETER_SEPARATORS[i] == c ) {
-        return true;
-      }
-    }
-    return false;
+    return /\s/.test(c) ? true : PARAMETER_SEPARATORS.some(par => par === c);
   }
 
   function parseSql(stmt) {
-    var ret;
+    let ret;
     if( globals.options.enableParseCache ) {
       ret = parseCache[stmt];
       if( ret ) {
@@ -121,13 +107,6 @@
     if( typeof stmt !== 'string' ) {
       throw new Error("stmt argument must be a string, given: " + typeof(stmt));
     }
-
-
-
-
-
-
-
     while( i < stmt.length ) {
       var skipToPosition = i;
       while( i < stmt.length ) {
@@ -265,9 +244,9 @@
    * appear in multiple positions.
    */
   function convertParamValues(parsedSql, values) {
-    var ret = [];
-    _.each(parsedSql.params, function(param) {
-      if( !_.has(values, param.name) ) {
+    const ret = [];
+    parsedSql.params.forEach(param => {
+      if( !values.hasOwnProperty(param.name) ) {
         throw new Error("No value found for parameter: " + param.name);
       }
       ret.push(values[param.name]);
@@ -288,7 +267,7 @@
       return;
     }
     globals.isPatched = true;
-    globals.options = _.defaults(options || {}, defaults);
+    globals.options = Object.assign(defaults, options || {});
     debug.main('Patching pg module with options:', globals.options);
 
     // Add named parameter support to Client.query:
